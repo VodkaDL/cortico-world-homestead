@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { newState, advance } from '../src/simulation.js';
+import { execute } from '../src/actions.js';
+import { recordActivity } from '../src/diary.js';
+import { config, DAY, HOUR, localDateTime } from '../src/time.js';
+import { loadState, saveState, validateState } from '../src/persistence.js';
+import { AT, cfg } from './helpers.mjs';
+test('每天21:00写一次基于实际事件的第一人称日记，21:00前不提前写',()=>{let s=newState(AT,cfg);s=execute(s,'reclaim',{fieldId:'field_1'},AT,cfg).state;const at=localDateTime('2026-11-23',21,0,cfg.timezone);advance(s,at-1,cfg);assert.equal(s.diary.entries.length,0);advance(s,at,cfg);assert.equal(s.diary.entries.length,1);assert.match(s.diary.entries[0].text,/开垦完成/);assert.match(s.diary.entries[0].text,/我/);assert(s.events.some(e=>e.type==='homestead.diary'));advance(s,at+HOUR,cfg);assert.equal(s.diary.entries.length,1);});
+test('跨日离线补写每天日记，历史不因通知滚动而消失，回拨不重复',()=>{const s=newState(AT,cfg);advance(s,AT+4*DAY,cfg);assert.equal(s.diary.entries.length,4);const ids=s.diary.entries.map(x=>x.date);advance(s,AT+DAY,cfg);assert.deepEqual(s.diary.entries.map(x=>x.date),ids);validateState(s);});
+test('21点后事情进入下一篇，日记不会虚构不存在的劳作',()=>{const s=newState(AT,cfg),at=localDateTime('2026-11-23',21,0,cfg.timezone);advance(s,at,cfg);recordActivity(s,'今晚整理了门廊收货箱。',at+HOUR,'store');advance(s,at+DAY,cfg);assert.match(s.diary.entries[1].text,/整理了门廊/);assert(!s.diary.entries[0].text.includes('整理了门廊'));assert(!s.diary.entries[0].text.includes('收获了水稻'));});
+test('使用配置时区的21点，保存重载后继续写且不重复',async t=>{const c=config({...cfg,timezone:'America/New_York'}),at=localDateTime('2026-11-23',20,59,c.timezone),s=newState(at,c),due=at+60000;advance(s,due,c);assert.equal(s.diary.entries[0].at,due);const dir=await mkdtemp(join(tmpdir(),'homestead-diary-'));t.after(()=>rm(dir,{recursive:true,force:true}));const file=join(dir,'state.json');await saveState(file,s);const r=await loadState(file);advance(r,due+HOUR,c);assert.equal(r.diary.entries.length,1);advance(r,due+DAY,c);assert.equal(r.diary.entries.length,2);});
+test('旧存档迁移不伪造升级前日记，保留作物和金币',()=>{const s=newState(AT,cfg);delete s.diary;delete s.animals;delete s.livestock;const migrated=validateState(s);assert.equal(migrated.diary.entries.length,0);assert.equal(migrated.coins,120);advance(migrated,AT+HOUR,cfg);assert.equal(migrated.diary.entries.length,0);});

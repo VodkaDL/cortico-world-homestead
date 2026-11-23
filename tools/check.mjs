@@ -18,6 +18,6 @@ for(const r of Object.values(BASE_RECIPES)){
   assert(r.yieldGrams<=g,`${r.id} 凭空增加重量`);
 }
 for(const p of def.create({}).webUi().panels)assert.equal(typeof ui.panels[p.id].mount,'function');
-const result=spawnSync(process.execPath,['--test',...['engine','market','world','catalog'].map(n=>`test/${n}.test.mjs`)],{cwd:fileURLToPath(root),encoding:'utf8'});
+const result=spawnSync(process.execPath,['--test',...['engine','market','world','catalog','livestock','diary'].map(n=>`test/${n}.test.mjs`)],{cwd:fileURLToPath(root),encoding:'utf8'});
 process.stdout.write(result.stdout);process.stderr.write(result.stderr);assert.equal(result.status,0,'测试未通过');
-console.log(`静态检查通过：${Object.keys(items).length} 商品、${Object.keys(BASE_RECIPES).length} 菜谱、7页面`);
+console.log(`静态检查通过：${Object.keys(items).length} 商品、${Object.keys(BASE_RECIPES).length} 菜谱、9页面`);

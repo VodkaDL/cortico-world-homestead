@@ -1,6 +1,8 @@
+import { PRODUCTS, SPECIES } from './livestock.js';
+
 /** 数量均以一个销售单位计；g / price 为该单位的重量 / 金币价格。 */
 export const WORKSHOPS = {
-  oil: '油坊', salt: '盐坊', tea: '茶坊', tools: '器具坊', crops: '作物坊', grocer: '食材铺',
+  oil: '油坊', salt: '盐坊', tea: '茶坊', tools: '器具坊', crops: '作物坊', grocer: '食材坊', livestock:'畜牧坊',
 };
 export const METHODS = {
   steam: { name: '蒸', tool: 'steamer' }, stir: { name: '炒', tool: 'wok' },
@@ -64,7 +66,34 @@ items.push(
   item('chicken','鸡肉','meat',100,2.5,{shelfHours:2,satiety:11,workshop:'grocer'}),
   item('fish','鲜鱼','meat',100,2.8,{shelfHours:2,satiety:9,workshop:'grocer'}),
   item('beef','牛肉','meat',100,8,{shelfHours:2,satiety:13,workshop:'grocer'}),
+  item('duck_meat','鸭肉','meat',100,3.1,{shelfHours:2,satiety:11,workshop:'grocer'}),
+  item('goose_meat','鹅肉','meat',100,4.6,{shelfHours:2,satiety:12,workshop:'grocer'}),
+  item('lamb','羊肉','meat',100,5.2,{shelfHours:2,satiety:12,workshop:'grocer'}),
+  item('duck_egg','鸭蛋','egg',70,1.6,{shelfHours:96,satiety:9,workshop:'grocer'}),
+  item('goose_egg','鹅蛋','egg',150,3.5,{shelfHours:120,satiety:14,workshop:'grocer'}),
+  item('offal_chicken','鸡杂','meat',100,1.1,{shelfHours:1,satiety:11,workshop:'grocer'}),
+  item('offal_duck','鸭内脏','meat',100,1.5,{shelfHours:1,satiety:11,workshop:'grocer'}),
+  item('offal_goose','鹅内脏','meat',100,2,{shelfHours:1,satiety:11,workshop:'grocer'}),
+  item('offal_cattle','牛杂','meat',100,1.8,{shelfHours:1,satiety:11,workshop:'grocer'}),
+  item('offal_sheep','羊杂','meat',100,1.3,{shelfHours:1,satiety:11,workshop:'grocer'}),
+  item('offal_pig','猪杂','meat',100,1.5,{shelfHours:1,satiety:11,workshop:'grocer'}),
   item('milk','巴氏鲜奶','dairy',250,3,{shelfHours:2,satiety:9,rawEdible:true,workshop:'grocer'}),
+  item('raw_milk','生鲜牛乳（需煮沸）','dairy',250,2,{shelfHours:1,satiety:9,rawEdible:false,workshop:'grocer'}),
+  item('wool','羊毛','processed',100,.45,{tags:['animal_product'],workshop:'grocer'}),
+  item('feather','禽羽','processed',100,.1,{tags:['animal_product'],workshop:'grocer'}),
+  item('fat_chicken','禽脂','oil',100,.2,{shelfHours:240,tags:['animal_product'],workshop:'grocer'}),
+  item('fat_duck','鸭脂','oil',100,.24,{shelfHours:240,tags:['animal_product'],workshop:'grocer'}),
+  item('fat_goose','鹅脂','oil',100,.3,{shelfHours:240,tags:['animal_product'],workshop:'grocer'}),
+  item('fat_cattle','牛脂','oil',100,.35,{shelfHours:240,tags:['animal_product'],workshop:'grocer'}),
+  item('fat_sheep','羊脂','oil',100,.3,{shelfHours:240,tags:['animal_product'],workshop:'grocer'}),
+  item('fat_pig','猪油','oil',100,.3,{shelfHours:240,tags:['animal_product'],workshop:'grocer'}),
+  item('hide_chicken','禽皮','processed',100,.2,{tags:['animal_product'],workshop:'grocer'}),
+  item('hide_duck','鸭皮','processed',100,.24,{tags:['animal_product'],workshop:'grocer'}),
+  item('hide_goose','鹅皮','processed',100,.35,{tags:['animal_product'],workshop:'grocer'}),
+  item('hide_cattle','牛皮','processed',100,.55,{tags:['animal_product'],workshop:'grocer'}),
+  item('hide_sheep','羊皮','processed',100,.45,{tags:['animal_product'],workshop:'grocer'}),
+  item('hide_pig','猪皮','processed',100,.28,{tags:['animal_product'],workshop:'grocer'}),
+  item('bone_cattle','牛骨','meat',100,.16,{shelfHours:2,tags:['animal_product'],workshop:'grocer'}),
   item('mushroom','蘑菇','vegetable',100,1.5,{shelfHours:24,satiety:3,workshop:'grocer'}),
   item('oil','菜籽油','oil',10,.18,{shelfHours:2160,tags:['oil'],workshop:'oil'}),
   item('sesame_oil','香油','oil',10,.6,{shelfHours:2160,tags:['oil'],workshop:'oil'}),
@@ -80,6 +109,10 @@ items.push(
   item('pest_control','生物防虫剂','material',100,5,{tags:['pest'],workshop:'crops'}),
   item('fuel','厨房燃料包（可用60分钟）','material',200,2,{tags:['fuel'],workshop:'tools'}),
   item('medicine','感冒药（一份）','material',20,8,{tags:['medicine']}),
+  item('livestock_feed','青贮与精饲料（1kg）','feed',1000,.55,{shelfHours:720,tags:['livestock','feed'],workshop:'livestock'}),
+  item('animal_medicine','兽药（一疗程）','veterinary',100,3,{tags:['medicine','livestock'],workshop:'livestock'}),
+  item('animal_supplement','矿物质补充料（100g）','feed',100,.35,{shelfHours:2160,tags:['feed','livestock'],workshop:'livestock'}),
+  item('butcher_kit','屠宰工具与卫生套件','tool',2400,85,{tags:['butcher','livestock'],workshop:'tools'}),
 );
 for (const [id,name,kind,g,price,tags] of [
   ['hoe','锄头','tool',1400,28,['farm']],['watering_can','浇水壶','tool',500,18,['farm']],
@@ -89,6 +122,8 @@ for (const [id,name,kind,g,price,tags] of [
   ['fryer','炸锅','kitchenware',2500,110,['kitchen']],['oven','小烤箱','kitchenware',4500,260,['kitchen']],
   ['hand_mill','手摇磨谷机','tool',2800,85,['processing']],['tea_set','茶具','kitchenware',600,45,['tea','kitchen']],
 ]) items.push(item(id,name,kind,g,price,{workshop:id==='tea_set'?'tea':'tools',tags}));
+for(const i of items){if(i.id.startsWith('hide_')||['wool','feather'].includes(i.id))i.kind='byproduct';if(i.id.startsWith('offal_')||i.id.startsWith('fat_')||['hide_chicken','hide_duck','hide_goose','feather'].includes(i.id)){i.g=10;i.price=Math.max(.01,Math.round(i.price*10)/100);}}
+for(const [species,s] of Object.entries(PRODUCTS))for(const sex of s.sexes)items.push(item(`livestock_${species}_${sex}`,`${SPECIES[species][sex]}（${s.unit}）`,'animal',s.weight,s.price,{workshop:'livestock',tags:['livestock',species],species,sex,liveWeightG:s.weight}));
 export const BASE_ITEMS = Object.fromEntries(items.map(i=>[i.id,i]));
 
 // 每个配方显式列出材料、调料、方式及分钟；不是任意食材笛卡尔积。
@@ -162,6 +197,12 @@ recipe('milk_tea','红茶奶茶','boil',10,{black_tea:1,milk:1,sugar:2},{waterMl
 recipe('ginger_tea','姜糖热饮','boil',15,{ginger:1,sugar:2},{waterMl:300,joy:7});
 recipe('steamed_bun','白面馒头','steam',50,{flour:2,yeast:1},{waterMl:120,satiety:34,joy:5,shelfHours:12,steps:['面粉、酵母和温水揉匀','醒发约25分钟，揉匀整形成小馒头','蒸锅上汽后蒸20分钟，焖5分钟出锅']});
 recipe('egg_pancake','葱香鸡蛋饼','stir',15,{flour:1,egg:2,scallion:1,oil:1,salt:1},{waterMl:80,joy:9});
+recipe('boiled_fresh_milk','煮鲜牛乳','boil',8,{raw_milk:1},{waterMl:0,yieldGrams:240,satiety:9,joy:4,starter:true});
+recipe('braised_lamb','清炖羊肉','boil',90,{lamb:3,ginger:1,salt:1},{waterMl:350,satiety:38,joy:10});
+recipe('steamed_duck','清蒸鸭肉','steam',50,{duck_meat:3,ginger:1,salt:1},{waterMl:150,satiety:34,joy:9});
+recipe('goose_stew','萝卜炖鹅','boil',100,{goose_meat:3,radish:2,ginger:1,salt:1},{waterMl:400,satiety:38,joy:11});
+recipe('beef_offal_soup','牛杂汤','boil',60,{offal_cattle:2,ginger:1,salt:1},{waterMl:300,satiety:28,joy:7});
+recipe('cattle_bone_soup','牛骨汤','boil',120,{bone_cattle:3,radish:2,salt:1},{waterMl:500,satiety:18,joy:8});
 export const BASE_RECIPES = Object.fromEntries(recipes.map(r=>[r.id,r]));
 export function recipeItem(r) { return item(`recipe_${r.id}`,`菜谱·${r.name}`,'recipe',20,Math.max(6,Math.round(r.price*2)),{recipeId:r.id,availableDay:r.availableDay,tags:['recipe']}); }
 export function foodItem(r) { return item(`dish_${r.id}`,r.name,'food',r.yieldGrams,r.price,{shelfHours:r.shelfHours,satiety:r.satiety,joy:r.joy,rawEdible:true,recipeId:r.id,availableDay:r.availableDay,tags:['cooked']}); }

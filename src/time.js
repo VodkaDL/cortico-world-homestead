@@ -1,7 +1,7 @@
 export const HOUR = 3_600_000;
 export const DAY = 24 * HOUR;
 export const STEP = 15 * 60_000;
-export const DEFAULTS = Object.freeze({enabled:false,timezone:'Asia/Shanghai',tickIntervalMs:60_000,growthMultiplier:1,weatherEnabled:true,hungerPerHour:3,carryLimitKg:12,merchantCapacityKg:180});
+export const DEFAULTS = Object.freeze({enabled:false,timezone:'Asia/Shanghai',tickIntervalMs:60_000,growthMultiplier:1,weatherEnabled:true,hungerPerHour:3,carryLimitKg:12,merchantCapacityKg:180,babyMode:true,babyModeConfigured:false,animalAgeMultiplier:1});
 const formats = new Map();
 export function config(raw={}) {
   const c={...DEFAULTS,...raw};
@@ -10,6 +10,8 @@ export function config(raw={}) {
     if(typeof c[key]!=='number'||!Number.isFinite(c[key])||c[key]<lo||c[key]>hi) throw new Error(`配置 ${key} 必须在 ${lo}–${hi} 之间`);
   }
   if(typeof c.weatherEnabled!=='boolean') throw new Error('weatherEnabled 必须为布尔值');
+  if(typeof c.babyMode!=='boolean'||typeof c.babyModeConfigured!=='boolean') throw new Error('宝宝模式选项必须为布尔值');
+  requireNumber(c.animalAgeMultiplier,'动物年龄倍率',.25,4);
   return c;
 }
 export function localTime(at,zone='Asia/Shanghai') {
@@ -19,6 +21,13 @@ export function localTime(at,zone='Asia/Shanghai') {
 }
 export function nextDay(day) { return new Date(Date.parse(`${day}T12:00:00Z`)+DAY).toISOString().slice(0,10); }
 export function marketOpen(at,zone) { const n=localTime(at,zone).minute; return (n>=390&&n<690)||(n>=840&&n<1020); }
+export function localDateTime(day,hour,minute=0,zone='Asia/Shanghai') {
+  const desired=Date.UTC(Number(day.slice(0,4)),Number(day.slice(5,7))-1,Number(day.slice(8,10)),hour,minute);
+  let guess=desired;
+  const fmt=new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+  for(let i=0;i<4;i++){const p=Object.fromEntries(fmt.formatToParts(new Date(guess)).map(x=>[x.type,x.value]));const rendered=Date.UTC(Number(p.year),Number(p.month)-1,Number(p.day),Number(p.hour),Number(p.minute),Number(p.second));const delta=desired-rendered;if(!delta)break;guess+=delta;}
+  return guess;
+}
 export function random(seed,key) { let h=(seed>>>0)^2166136261; for(const ch of String(key)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);} h^=h>>>16;h=Math.imul(h,0x7feb352d);h^=h>>>15;h=Math.imul(h,0x846ca68b);return ((h^(h>>>16))>>>0)/4294967296; }
 export function clamp(n,lo=0,hi=100) { return Math.max(lo,Math.min(hi,n)); }
 export function money(n) { return Math.round((n+Number.EPSILON)*100)/100; }

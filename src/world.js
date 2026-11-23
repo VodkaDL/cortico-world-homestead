@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyAction } from './actions.js';
+import { seedStarterLivestock } from './livestock.js';
 import { config, DEFAULTS } from './time.js';
 import { advance, event, newState } from './simulation.js';
 import { loadState, saveState } from './persistence.js';
@@ -12,34 +13,35 @@ const integer=(description,min=1,max=1000)=>({...number(description,min,max),typ
 const cargo={type:'array',maxItems:100,items:obj({batchId:str('库存批次ID'),quantity:integer('件数')},['batchId','quantity'])};
 const decl=(name,description,parameters,action=null)=>({name:`homestead_${name}`,description,parameters,tags:action?['write']:['read','snapshot'],action});
 export const TOOL_DECLS=[
-  decl('status','查看田园总览、人物饱腹/愉悦/健康/体力/水分/清洁/社交/保暖、天气、库存批次、菜谱与赶集行程。area=recipes仅返回已经掌握的菜谱；catalog列出已有商品供公告使用。',obj({area:{type:'string',enum:['overview','farm','inventory','kitchen','market','recipes','catalog']}})),
+  decl('status','查看人物、田地、养殖、库存、厨房与行程。area=diary读取每日21:00写成的真实经历日记；recipes仅返回已经掌握的菜谱；catalog供公告使用。',obj({area:{type:'string',enum:['overview','farm','livestock','inventory','kitchen','market','recipes','catalog','diary']}})),
   decl('farm','在家管理田块。先开垦荒田，再播种；真实时间生长。浇水耗水，施肥耗库存，防虫耗药，洪水需排水。',obj({action:{type:'string',enum:['reclaim','sow','water','weed','fertilize','drain','pest','scarecrow','harvest','clear_field']},fieldId:str('田块ID'),cropId:str('仅播种时需要作物ID'),container:str('收获目标容器ID，可省略')},['action','fieldId']),'farm'),
   decl('cook','按已掌握菜谱烹饪，需要厨具、食材、调料、燃料与水；出锅前不可食用，成品会腐败。',obj({recipeId:str('已掌握菜谱ID'),quantity:integer('份数',1,6),container:str('成品容器，默认fridge')},['recipeId']),'cook'),
   decl('process','用手摇磨加工稻谷成大米或小麦成面粉，按80%出品；不能挽救变质原粮。',obj({itemId:{type:'string',enum:['paddy','wheat']},quantity:integer('百克原粮份数',5,100),container:str('目标容器，默认granary')},['itemId','quantity']),'process'),
   decl('eat','吃当前能取到的一批可直接食用食物，每次1–3份。新鲜度越低饱腹恢复越少；临期会损害愉悦和健康，完全腐败不可食用。',obj({batchId:str('库存批次ID'),quantity:integer('份数',1,3)},['batchId']),'eat'),
   decl('store','在家整理容器。move移动或卸背包，不重置腐败；discard将过期品放厨余桶；empty_trash清空，可选择堆肥。',obj({action:{type:'string',enum:['move','unpack','discard','empty_trash']},batchId:str('批次ID'),quantity:integer('数量'),container:str('目标容器ID'),compost:{type:'boolean'}},['action']),'store'),
   decl('care','照顾自己的真实生活需求：补水、打水、洗漱、休息、结束休息、玩耍或感冒服药。冷雨中户外玩耍会感冒，药物有6小时冷却。',obj({action:{type:'string',enum:['drink','fill_water','wash','rest','cancel_rest','play','medicine']},liters:number('打水升数',1,50),hours:number('休息小时',.25,12),outdoors:{type:'boolean'}},['action']),'care'),
-  decl('depart','营业时从家里带货和金币赶集；金币0.5g/枚。只携带指定库存批次，已有背包物件也计重。负重越高路程越慢，可能赶到时闭市。',obj({coins:number('从家中携带的金币',0,1000000),items:cargo}),'depart'),
-  decl('trade','到达开放的集市后买卖或以物易物。购买用stockId；出售或交换用offer列出背包批次与数量。交换超额价值不找零；只有随身金币和背包可用，买菜谱后才会掌握。',obj({mode:{type:'string',enum:['buy','sell','barter']},stockId:str('货架ID'),quantity:integer('购买数量'),offer:cargo},['mode']),'trade'),
+  decl('depart','营业时从家里带货和金币赶集；金币0.5g/枚。只携带指定库存批次，已有背包物件也计重；每批可指定carrierId，将该批交给已选择的随行牲畜。年龄、健康、饱腹及物种影响负重和路速。',obj({coins:number('从钱箱带的金币',0,1000000),items:{type:'array',maxItems:100,items:obj({batchId:str('库存批次ID'),quantity:integer('件数'),carrierId:str('随行家畜ID，不用牲畜驮运时省略')},['batchId','quantity'])},followers:{type:'array',maxItems:8,items:{type:'string',description:'随行家畜ID'}}}),'depart'),
+  decl('trade','到达开放的集市后买卖或以物易物。购买用stockId；出售或交换用offer列出背包批次与数量。mode=butcher使用本次随行健康动物委托代宰；mode=porter选择食材坊待托运屠宰品，次日08:00送到家。费用可用物品抵偿，多余不找零。',obj({mode:{type:'string',enum:['buy','sell','barter','butcher','porter']},stockId:str('货架ID'),quantity:integer('购买数量'),offer:cargo,animalIds:{type:'array',maxItems:8,items:{type:'string'}},goods:{type:'array',maxItems:60,items:obj({pendingId:str('食材坊待托运货物ID，与batchId选一个'),batchId:str('随身背包货物批次ID'),quantity:integer('100g单位数量')},['quantity'])}},['mode']),'trade'),
   decl('notice','到开放的集市向管理员付2金币或足值随身物件，公告1–20种已有物品ID。次日商人优先带货，超载时按最轻优先使种类数最多；超额物件不找零。',obj({itemIds:{type:'array',minItems:1,maxItems:20,items:{type:'string'}},offer:cargo},['itemIds']),'notice'),
+  decl('husbandry','宝宝模式关闭后照料家禽家畜、配种、治疗疾病、收取动物副产物或屠宰。公母须同种且成熟，母牛须受精生小牛后泌乳。治疗需持续用兽药；在家屠宰需卫生套件。健康屠宰肉品正常，寿终肉饱腹较高但保鲜短，病死动物及肉品禁食。',obj({action:{type:'string',enum:['feed','treat','breed','slaughter','release','collect','dispose']},animalId:str('动物ID'),femaleId:str('母畜ID'),maleId:str('公畜ID'),batchId:str('动物运输箱批次'),quantity:integer('饲料kg或动物数',1,20)},['action']),'husbandry'),
   decl('return','从集市返家，闭市也可以返程。行程取决于当前负重；到家金币入箱，货物仍在背包，需自己整理入库。',obj(),'return'),
 ];
-export const PANELS=[['overview','田园总览'],['farm','田地与天气'],['kitchen','厨房与菜谱'],['storage','仓储与保鲜'],['market','赶集与公告'],['recipes','添加菜谱'],['items','添加物品']];
-const panelMethods={overview:['care'],farm:['farm','fill_water'],kitchen:['cook','process','eat'],storage:['move','unpack','discard','empty_trash','eat'],market:['depart','return','trade','notice'],recipes:['add_recipe'],items:['add_item']};
+export const PANELS=[['overview','田园总览'],['farm','田地与天气'],['livestock','动物与养殖'],['kitchen','厨房与菜谱'],['storage','仓储与保鲜'],['market','赶集与公告'],['diary','小院日记'],['recipes','添加菜谱'],['items','添加物品']];
+const panelMethods={overview:['care'],farm:['farm','fill_water'],livestock:['husbandry'],kitchen:['cook','process','eat'],storage:['move','unpack','discard','empty_trash','eat','husbandry'],market:['depart','return','trade','notice','porter'],diary:[],recipes:['add_recipe'],items:['add_item']};
 const allowedFarm=new Set(['reclaim','sow','water','weed','fertilize','drain','pest','scarecrow','harvest','clear_field']);
 const allowedCare=new Set(['drink','fill_water','wash','rest','cancel_rest','play','medicine']);
 const allowedStore=new Set(['move','unpack','discard','empty_trash']);
 const stage=p=>p.satiety<=0?4:p.satiety<=15?3:p.satiety<=35?2:p.satiety<=60?1:0;
 export class HomesteadWorld {
   id='homestead';#state=null;#host=null;#timer=null;#queue=Promise.resolve();#started=false;#closing=false;
-  constructor(opts={}) {this.cfg=opts.cfg??{...DEFAULTS};this.dataDir=opts.dataDir??process.cwd();this.packageDir=opts.packageDir??process.cwd();this.now=opts.now??(()=>Date.now());this.noTimer=opts.noTimer??false;}
+  constructor(opts={}) {this.cfg=opts.cfg??{...DEFAULTS};this.persist=opts.persist??(()=>{});this.dataDir=opts.dataDir??process.cwd();this.packageDir=opts.packageDir??process.cwd();this.now=opts.now??(()=>Date.now());this.noTimer=opts.noTimer??false;}
   stateFile(){return join(this.dataDir,'homestead','state.json');}
   envPromptVars(){return {};}
   serial(fn){const p=this.#queue.then(fn);this.#queue=p.catch(()=>{});return p;}
   ensure(){if(!this.#started||this.#closing)throw new Error('田园烟火尚未启动，请在 World 页启用');}
   async #advanceSave() {
     const next=structuredClone(this.#state),cfg=config(this.cfg),now=this.now(),before=stage(next.pet);
-    advance(next,now,cfg);if(stage(next.pet)>before)event(next,'hunger','肚子饿了，请查看库存与已掌握菜谱，优先吃新鲜食物。',now);
+    advance(next,now,cfg);if(!cfg.babyMode&&!next.livestock.setupGranted){seedStarterLivestock(next,now);event(next,'life','养殖模式已启用，首批动物、饲料、兽药和屠宰套件已备齐。',now);}if(stage(next.pet)>before)event(next,'hunger','肚子饿了，请查看库存与已掌握菜谱，优先吃新鲜食物。',now);
     await saveState(this.stateFile(),next);this.#state=next;
     return cfg;
   }
@@ -66,7 +68,9 @@ export class HomesteadWorld {
       if(!action){const s=await this.read(),area=args.area??'overview';let value;
         if(area==='farm')value={fields:s.fields,weather:s.weather,waterLiters:s.waterLiters,crops:s.crops};
         else if(area==='inventory')value={batches:s.batches,containers:s.containers,coins:s.coins,carriedCoins:s.carriedCoins,trip:s.trip};
+        else if(area==='livestock')value={enabled:!s.babyMode,animals:s.animals,housing:s.livestock.housing,feedStock:s.batches.filter(b=>b.itemId==='livestock_feed').reduce((n,b)=>n+b.quantity,0),diseaseAlerts:s.animals.filter(a=>a.status==='alive'&&a.sick).map(a=>({id:a.id,species:a.species,disease:a.disease,health:a.health}))};
         else if(area==='recipes')value=s.recipes.filter(r=>r.learned);
+        else if(area==='diary')value=s.diary;
         else if(area==='catalog')value=s.items.filter(i=>i.availableDay<=s.market.day).map(({id,name,g,price})=>({id,name,g,price}));
         else if(area==='market')value={market:s.market,trip:s.trip,coins:s.carriedCoins,bag:s.batches.filter(b=>b.container==='bag'),notices:s.notices};
         else if(area==='kitchen')value={jobs:s.jobs,fuelMinutes:s.fuelMinutes,waterLiters:s.waterLiters,recipes:s.recipes.filter(r=>r.learned)};
@@ -74,21 +78,32 @@ export class HomesteadWorld {
         return {text:JSON.stringify(value,null,2)};
       }
       let name=action;if(['farm','care','store'].includes(action)){const list=action==='farm'?allowedFarm:action==='care'?allowedCare:allowedStore;if(!list.has(args.action))throw new Error('无效子动作');name=args.action;}
+      if(action==='husbandry'&&!['feed','treat','breed','slaughter','release','collect','dispose'].includes(args.action))throw new Error('无效养殖动作');
       const res=await this.act(name,args,false);return {text:res.message};
     }catch(err){return {failed:true,text:`田园操作失败：${err.message}`};}
   }}));}
   async invoke(panel,method,args=[]) {
     if(!Object.hasOwn(panelMethods,panel))throw new Error('未知田园面板');
+    if(panel==='overview'&&method==='choose-mode')return await this.serial(async()=>{
+      this.ensure();const cfg=config(this.cfg);if(cfg.babyModeConfigured)return {message:'宝宝模式已完成初始选择，可在World设置中随时修改。',state:snapshot(this.#state,this.now(),cfg)};
+      const a=Array.isArray(args)?args[0]??{}:args;if(typeof a.babyMode!=='boolean')throw new Error('请先选择是否开启宝宝模式');
+      const next=structuredClone(this.#state);if(!a.babyMode)seedStarterLivestock(next,this.now());
+      await saveState(this.stateFile(),next);await this.persist({babyMode:a.babyMode,babyModeConfigured:true});this.cfg.babyMode=a.babyMode;this.cfg.babyModeConfigured=true;this.#state=next;
+      event(this.#state,'life',a.babyMode?'已开启宝宝模式，动物养殖与屠宰暂不启用。':'已开启养殖模式，禽舍和畜棚迎来了第一批动物。',this.now());await saveState(this.stateFile(),this.#state);await this.#deliver();
+      return {message:a.babyMode?'已启用宝宝模式，养殖屠宰相关操作已隐藏；可在World配置里随时切换。':'养殖模式已启用，初始动物及饲料已添加；可在「动物与养殖」管理。',state:snapshot(this.#state,this.now(),config(this.cfg))};
+    });
     if(method==='state')return this.#started?this.read():{started:false};
     if(!panelMethods[panel].includes(method))throw new Error('此面板不提供该方法');
     const a=Array.isArray(args)?args[0]??{}:args;let name=method;
     if(method==='farm'){if(!allowedFarm.has(a.action))throw new Error('无效田间动作');name=a.action;}
     if(method==='care'){if(!allowedCare.has(a.action))throw new Error('无效照料动作');name=a.action;}
+    if(method==='trade'&&panel==='market')name='trade';
     return this.act(name,a,true);
   }
   webUi(){const s=this.#state;return {label:'田园烟火',lamps:[{label:'田园世界',state:this.#started?'online':'offline'}],badges:[{label:'饱腹',value:s?Math.round(s.pet.satiety):'—',tone:'plain'},{label:'健康',value:s?Math.round(s.pet.health):'—',tone:'plain'},{label:'金币',value:s?Math.round((s.coins+s.carriedCoins)*100)/100:'—',tone:'plain'}],
     panels:PANELS.map(([id,title])=>({id,title,getMethods:[]})),invoke:(p,m,a)=>this.invoke(p,m,a),
     config:[{id:'homestead',owner:'world:homestead',title:'田园烟火',schema:{type:'object',properties:Object.fromEntries([
+      ['babyMode',{type:'boolean',title:'宝宝模式（默认开启；关闭后启用动物养殖与屠宰）'}],['animalAgeMultiplier',{type:'number',minimum:.25,maximum:4,title:'动物生理年龄倍率'}],
       ['timezone',{type:'string',title:'营业时区（IANA）'}],['growthMultiplier',{type:'number',minimum:.1,maximum:10,title:'作物生长倍率'}],['weatherEnabled',{type:'boolean',title:'随机天气'}],['hungerPerHour',{type:'number',minimum:0,maximum:20,title:'每小时饱腹消耗'}],['carryLimitKg',{type:'number',minimum:2,maximum:50,title:'健康时负重kg'}],['merchantCapacityKg',{type:'number',minimum:10,maximum:1000,title:'商人马车载重kg'}],['tickIntervalMs',{type:'number',minimum:5000,maximum:3600000,title:'结算间隔ms'}],
     ].map(([k,v])=>[`worlds.homestead.${k}`,{...v,'x-hot':true}]))}}],
     promptDocs:[{key:'worlds.homestead.env',title:'田园烟火',description:'种田、厨房、保鲜与赶集规则',path:fileURLToPath(new URL('./ENV_PROMPT.md',import.meta.url)),role:'envPrompt'}],

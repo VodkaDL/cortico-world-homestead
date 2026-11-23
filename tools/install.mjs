@@ -20,4 +20,4 @@ const manifest=join(extensions,'package.json');let data={name:'cortico-extension
 if(await exists(manifest)){data=JSON.parse((await readFile(manifest,'utf8')).replace(/^\uFEFF/,''));await copyFile(manifest,`${manifest}.backup-${stamp}`);}
 data.dependencies??={};data.dependencies[name]=`link:local/${name}`;
 await writeFile(`${manifest}.tmp`,JSON.stringify(data,null,2)+'\n','utf8');await rename(`${manifest}.tmp`,manifest);
-console.log(JSON.stringify({installed:target,link,package:name,version:'1.0.0',restartRequired:true,note:'请重启Coopanion后，在World页启用田园烟火；未改动其他World或个人配置'},null,2));
+console.log(JSON.stringify({installed:target,link,package:name,version:JSON.parse(await readFile(join(source,'package.json'),'utf8')).version,restartRequired:true,note:'请重启Coopanion后，在World页启用田园烟火；未改动其他World或个人配置'},null,2));

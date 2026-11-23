@@ -1,6 +1,6 @@
 import { catalogFor, METHODS, WORKSHOPS } from './catalog.js';
 import { requireNumber, requireText } from './time.js';
-const kinds=new Set(['grain','vegetable','fruit','legume','seed','spice','oil','tea','egg','meat','dairy','processed','food','tool','kitchenware','material','fertilizer']);
+const kinds=new Set(['grain','vegetable','fruit','legume','seed','spice','oil','tea','egg','meat','dairy','processed','food','tool','kitchenware','material','fertilizer','feed','veterinary','byproduct']);
 const keys=new Set(['id','name','kind','g','price','shelfHours','satiety','joy','rawEdible','tags','workshop','crop']);
 function object(v) { if(!v||typeof v!=='object'||Array.isArray(v))throw new Error('请输入对象');return v; }
 function identifier(id) { if(typeof id!=='string'||!/^[a-z][a-z0-9_]{1,47}$/.test(id)||['constructor','prototype','__proto__'].includes(id)||id.startsWith('dish_')||id.startsWith('recipe_')||id.startsWith('seed_'))throw new Error('ID 须为2–48位小写字母数字或下划线，不得使用系统保留前缀');return id; }
@@ -22,7 +22,7 @@ export function validateItem(input,state) {
   if(['meat','egg'].includes(p.kind)&&p.rawEdible)throw new Error('生肉和生鸡蛋不能标记为可直接食用');
   const tags=p.tags??[];if(!Array.isArray(tags)||tags.length>8||tags.some(t=>typeof t!=='string'||! /^[a-z_]{1,24}$/.test(t)))throw new Error('标签须为不超过8个英文单词');
   const workshop=p.workshop||null;if(workshop&&!Object.hasOwn(WORKSHOPS,workshop))throw new Error('未知作坊');
-  const matches={oil:p.kind==='oil',salt:p.kind==='spice'&&tags.some(t=>['salt','seasoning'].includes(t)),tea:p.kind==='tea'||(p.kind==='kitchenware'&&tags.includes('tea')&&/茶|tea/i.test(name)),tools:['tool','kitchenware','material'].includes(p.kind),crops:['fertilizer','seed'].includes(p.kind)||p.kind==='material'&&tags.some(t=>['pest','farm'].includes(t)),grocer:edible&&p.kind!=='food'};
+  const matches={oil:p.kind==='oil',salt:p.kind==='spice'&&tags.some(t=>['salt','seasoning'].includes(t)),tea:p.kind==='tea'||(p.kind==='kitchenware'&&tags.includes('tea')&&/茶|tea/i.test(name)),tools:['tool','kitchenware','material'].includes(p.kind),crops:['fertilizer','seed'].includes(p.kind)||p.kind==='material'&&tags.some(t=>['pest','farm'].includes(t)),grocer:edible&&p.kind!=='food',livestock:['feed','veterinary'].includes(p.kind)&&tags.includes('livestock')};
   if(workshop&&!matches[workshop])throw new Error(`分类、名称或标签与${WORKSHOPS[workshop]}不匹配`);
   let crop;
   if(p.kind==='seed'){
@@ -44,7 +44,7 @@ export function validateRecipe(input,state) {
   if(Math.abs(price*100-Math.round(price*100))>1e-6)throw new Error('金币价格最多两位小数');
   if(!Array.isArray(p.ingredients)||!p.ingredients.length||p.ingredients.length>20)throw new Error('每份菜谱须有1–20种食材');
   const seen=new Set();const ingredients=p.ingredients.map(x=>{
-    object(x);const i=items[x.itemId];if(!i||['recipe','tool','kitchenware','material','fertilizer','seed'].includes(i.kind))throw new Error(`无效食材：${x.itemId}`);
+    object(x);const i=items[x.itemId];if(!i||!['grain','vegetable','fruit','legume','spice','oil','tea','egg','meat','dairy','processed','food'].includes(i.kind))throw new Error(`无效食材：${x.itemId}`);
     if(seen.has(i.id))throw new Error('同一食材请合并数量');seen.add(i.id);
     if(p.method==='cold'&&!i.rawEdible&&!['spice','oil','tea'].includes(i.kind))throw new Error(`${i.name}不能用于免加热凉拌`);
     return {itemId:i.id,quantity:requireNumber(x.quantity,'食材份数',1,100,true)};

@@ -5,7 +5,7 @@ const STYLE=`
 `;
 const WEIGHT=g=>g<1000?`${Number(g.toFixed(1))} g`:`${Number((g/1000).toFixed(3))} kg`;
 const num=n=>Number(n??0).toFixed(0),coin=n=>Number(Number(n??0).toFixed(2)),pct=n=>`${num(n*100)}%`,phase={home:'在家',outbound:'赶集途中',market:'集市',returning:'返程途中'};
-const kindName={grain:'谷物',vegetable:'蔬菜',fruit:'水果',legume:'豆类',seed:'种子',spice:'佐料',oil:'食用油',tea:'茶叶',egg:'鸡蛋',meat:'肉类',dairy:'乳品',processed:'加工食材',food:'熟食',tool:'农具',kitchenware:'厨具',material:'材料',fertilizer:'肥料'};
+const kindName={grain:'谷物',vegetable:'蔬菜',fruit:'水果',legume:'豆类',seed:'种子',spice:'佐料',oil:'食用油',tea:'茶叶',egg:'鸡蛋',meat:'肉类',dairy:'乳品',processed:'加工食材',food:'熟食',tool:'农具',kitchenware:'厨具',material:'材料',fertilizer:'肥料',animal:'活体动物',feed:'饲料',veterinary:'兽药',byproduct:'动物副产物'};
 const emoji={paddy:'🌾',wheat:'🌾',corn:'🌽',potato:'🥔',tomato:'🍅',spinach:'🌿',cucumber:'🥒',strawberry:'🍓',watermelon:'🍉',pumpkin:'🎃',carrot:'🥕'};
 function h(tag,attrs={},...kids){const el=document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(k==='class')el.className=v;else if(k.startsWith('on'))el.addEventListener(k.slice(2).toLowerCase(),v);else if(k==='text')el.textContent=v;else if(k in el)el[k]=v;else el.setAttribute(k,v);}for(const c of kids.flat(Infinity)){if(c==null)continue;el.append(c instanceof Node?c:document.createTextNode(String(c)));}return el;}
 const text=(s,cls='sub')=>h('div',{class:cls},s);
@@ -34,6 +34,7 @@ function mount(ctx,panel){
   function stats(){const names=[['satiety','饱腹'],['joy','愉悦'],['health','健康'],['energy','体力'],['hydration','水分'],['hygiene','清洁'],['social','社交'],['warmth','保暖']];return h('div',{class:'grid stats'},names.map(([k,n])=>h('div',{class:'stat'},text(n,'label'),h('strong',{},num(state.pet[k]),h('small',{class:'sub'},' / 100')),bar(state.pet[k],state.pet[k]<25?'bad':state.pet[k]<45?'warn':''))));}
   function overview(){
     content.append(frame('一方小院，四季有滋味。','从开垦第一块荒田开始，把收获留在粮仓，把好心情装进每一天。世界按真实时间运转，离线也会生长与腐败。'),stats());
+    if(!state.babyModeConfigured){const choice=card('初次进入：选择宝宝模式',text('宝宝模式默认开启，会隐藏养殖与屠宰内容；关闭后将启用动物繁殖、治疗和屠宰。以后可随时在 World 配置中切换。'),h('div',{class:'actions'},button('保持宝宝模式',()=>void run('choose-mode',{babyMode:true}),'primary'),button('关闭宝宝模式并开启养殖',()=>void run('choose-mode',{babyMode:false}))));content.append(h('div',{role:'dialog','aria-modal':'true','aria-label':'初次进入：选择宝宝模式',style:'position:fixed;inset:0;background:#182f2866;z-index:20;display:grid;place-items:center;padding:24px'},choice));}
     const care=card('照顾自己',text(`水池 ${state.waterLiters.toFixed(1)} / 200 L · 钱箱 ${state.coins} 金币 · 随身 ${state.carriedCoins} 金币`),text(state.pet.coldUntil>state.now?`正在感冒，预计${duration(state.pet.coldUntil-state.now)}后缓解`:'身体状态平稳'));
     care.append(h('div',{class:'actions'},cmd('care',{action:'drink'},'喝水'),cmd('care',{action:'wash'},'洗漱'),cmd('care',{action:'play',outdoors:false},'室内玩耍'),cmd('care',{action:'play',outdoors:true},'户外玩耍'),cmd('care',{action:'medicine'},'服药'),cmd('care',{action:'rest',hours:2},'休息2小时'),cmd('care',{action:'cancel_rest'},'结束休息')));
     if(state.pet.restUntil>state.now)care.append(h('div',{class:'note'},`正在休息，还需 ${duration(state.pet.restUntil-state.now)}。`));
@@ -53,6 +54,22 @@ function mount(ctx,panel){
       grid.append(c);
     }
     const liters=input('20','number',{min:1,max:50,'aria-label':'打水升数'});content.append(grid,h('div',{class:'toolbar'},label('从井里打水（1–50 L）',liters),button('打水',()=>void run('fill_water',{liters:Number(liters.value)}))),h('div',{class:'note'},'作物周期为理想条件下约28–120个真实小时。干旱、杂草、虫害会延长周期；反复浇水不增加即时生长进度。'));
+  }
+  function livestock(){
+    content.append(frame('照料一群有生命的小伙伴。','动物会成长、繁殖、产蛋产奶，也会饥饿、生病和老去。按时补饲与治疗；屠宰只处理健康动物或自然寿终动物。'));
+    if(state.babyMode){content.append(h('div',{class:'note'},'宝宝模式已开启，养殖与屠宰功能暂时关闭。可在 World 配置中关闭宝宝模式。'));return;}
+    const hatches=state.livestock.housing.map(x=>text(`${x.name}：${x.used} / ${x.capacity} ${x.unit}`));content.append(card('禽舍、畜棚与鱼塘',...hatches));
+    const animals=state.animals.filter(a=>a.status==='alive');
+    const feedStock=state.batches.filter(b=>b.itemId==='livestock_feed'&&b.container!=='bag').reduce((n,b)=>n+b.quantity,0);
+    content.append(card('饲料与收集',text(`青贮饲料库存 ${feedStock} kg · 禽蛋、羊毛等待收取 ${state.livestock.pendingProduce?.length??0} 批`),h('div',{class:'actions'},button('收取动物副产物',()=>void run('husbandry',{action:'collect'}),'',!(state.livestock.pendingProduce?.length)),button('查看畜牧坊补充饲料与兽药',()=>{announce('请在「赶集与公告」页面购买饲料、兽药与动物。');}))));
+    if(!animals.length)content.append(text('目前没有存活动物，可在畜牧坊购买幼畜或成畜。','empty'));
+    for(const a of state.animals){const c=card(`${a.name} · ${a.id} · ${a.sex==='female'?'母':'公'}`,text(`${a.ageText} · ${a.status==='alive'?'存活':a.deathCause==='natural'?'自然寿终':a.deathCause==='disease'?'病死':'已屠宰'} · ${a.deathCause??''}`),text(`健康 ${num(a.health)}% · 饱食 ${num(a.appetite)}% · 体力 ${num(a.energy)}%${a.carryCapacityG?` · 驮力 ${WEIGHT(a.carryCapacityG)}`:''}`),bar(a.health,a.health<30?'bad':a.health<60?'warn':''));
+      if(a.status==='alive'){if(a.sick)c.append(h('div',{class:'note'},`患病：${a.disease} · 立即治疗，持续用药直到康复`));if(a.pregnancy)c.append(h('div',{class:'note'},`妊娠中 · 预计 ${a.gestationHours.toFixed(1)} 小时后生产`));
+        c.append(h('div',{class:'actions'},button('喂1kg饲料',()=>void run('husbandry',{action:'feed',animalId:a.id,quantity:1})),a.sick?button('治疗',()=>void run('husbandry',{action:'treat',animalId:a.id}),'primary'):null,button('在家屠宰',()=>{if(confirm(`确认屠宰${a.name}？`))void run('husbandry',{action:'slaughter',animalId:a.id});},'danger',a.sick||!!a.pregnancy)));
+      }else if(!a.processed)c.append(h('div',{class:'actions'},a.deathCause==='natural'?button('处理寿终动物',()=>void run('husbandry',{action:'slaughter',animalId:a.id}),'primary'):null,button('无害化处理',()=>void run('husbandry',{action:'dispose',animalId:a.id}),'danger')));
+      content.append(c);
+    }
+    const females=animals.filter(a=>a.sex==='female'),males=animals.filter(a=>a.sex==='male');if(females.length&&males.length){const mother=select(females.map(a=>[a.id,`${a.name} · ${a.id} · ${a.ageText}`]),females[0].id),father=select(males.map(a=>[a.id,`${a.name} · ${a.id} · ${a.ageText}`]),males[0].id);content.append(card('配种',text('选择同种且成熟的公母动物。母畜受精后会在模拟妊娠期生产，住房不足时幼崽数量会受限。'),mother,father,button('安排配种',()=>void run('husbandry',{action:'breed',femaleId:mother.value,maleId:father.value}),'primary')));}
   }
   function recipeCards(target,list,kitchen=false){
     target.replaceChildren();if(!list.length){target.append(text('没有符合条件的菜谱','empty'));return;}
@@ -79,10 +96,11 @@ function mount(ctx,panel){
   function storage(){
     content.append(frame('把新鲜，妥帖地留住。','每批食物有自己的年龄。换个容器只会改变之后变质的速度，已经流逝的新鲜不会回来。'),h('div',{class:'grid stats'},state.containers.map(c=>h('div',{class:'stat'},text(c.name,'label'),h('strong',{style:'font-size:21px'},WEIGHT(c.usedG)),text(`/ ${WEIGHT(c.capacityG)}${c.reservedG?` · 预留${WEIGHT(c.reservedG)}`:''}`),bar((c.usedG+c.reservedG)/c.capacityG*100),text(c.description)))));
     const filter=select([['all','全部库存'],...state.containers.map(c=>[c.id,c.name])],'all',{'aria-label':'按容器筛选'}),search=input('','search',{placeholder:'搜索物品名称…','aria-label':'搜索库存'}),holder=h('div');
-    function draw(){const list=state.batches.filter(b=>(filter.value==='all'||b.container===filter.value)&&b.name.includes(search.value));holder.replaceChildren(table(['物品 / 批次','位置','数量 / 重量','保鲜','操作'],list.map(b=>{const to=select(state.containers.filter(c=>!['bag','trash'].includes(c.id)).map(c=>[c.id,c.name]),['tool','kitchenware','material','fertilizer'].includes(b.kind)?'shed':b.kind==='grain'?'granary':'fridge',{'aria-label':`${b.name}目标容器`}),quantity=input(String(b.quantity),'number',{min:1,max:b.quantity,class:'compact','aria-label':`${b.name}操作数量`});
+    function draw(){const list=state.batches.filter(b=>(filter.value==='all'||b.container===filter.value)&&b.name.includes(search.value));holder.replaceChildren(table(['物品 / 批次','位置','数量 / 重量','保鲜','操作'],list.map(b=>{const to=select(state.containers.filter(c=>!['bag','trash'].includes(c.id)).map(c=>[c.id,c.name]),['tool','kitchenware','material','fertilizer','veterinary','byproduct'].includes(b.kind)?'shed':['grain','feed'].includes(b.kind)?'granary':'fridge',{'aria-label':`${b.name}目标容器`}),quantity=input(String(b.quantity),'number',{min:1,max:b.quantity,class:'compact','aria-label':`${b.name}操作数量`});
       const actions=h('div',{class:'row'});if(b.container!=='trash'){
         actions.append(quantity);
-        if(b.expired)actions.append(button('丢入厨余桶',()=>void run('discard',{batchId:b.id,quantity:Number(quantity.value)}),'danger'));
+        if(b.kind==='animal'){if(!state.babyMode)actions.append(button('安置入栏',()=>void run('husbandry',{action:'release',batchId:b.id,quantity:Number(quantity.value)}),'primary'));else actions.append(text('活体运输箱 · 关闭宝宝模式后可安置'));}
+        else if(b.expired)actions.append(button('丢入厨余桶',()=>void run('discard',{batchId:b.id,quantity:Number(quantity.value)}),'danger'));
         else {actions.append(to,button('移动',()=>void run(b.container==='bag'?'unpack':'move',{batchId:b.id,quantity:Number(quantity.value),container:to.value})));if(b.rawEdible)actions.append(cmd('eat',{batchId:b.id,quantity:1},'吃一份'));}
       }
       return h('tr',{},h('td',{},h('strong',{},b.name),text(b.id)),h('td',{},state.containers.find(c=>c.id===b.container)?.name),h('td',{},`${b.quantity} / ${b.weight}`),h('td',{class:b.expired?'danger-text':''},b.expired?'完全腐败 · 不可食用':`${pct(b.freshness)}${b.remainingHours==null?' · 耐储存':` · 剩约${b.remainingHours.toFixed(1)}h`}`),h('td',{},actions));})))}
@@ -90,12 +108,14 @@ function mount(ctx,panel){
   }
   function market(){
     const bag=state.containers.find(c=>c.id==='bag');content.append(frame('带着收成，去赶一场集。',`每日 ${state.market.hours} 开放 · ${state.timezone}。固定作坊与流动商人都在等你。`),h('div',{class:'travel'},h('div',{class:'row spread'},h('strong',{},`${state.market.open?'● 正在营业':'○ 现在闭市'} · ${phase[state.trip.phase]}`),h('span',{},`随身 ${state.carriedCoins} 金币 · 负重 ${WEIGHT(bag.usedG)} / ${WEIGHT(bag.capacityG)}`)),state.trip.arriveAt?text(`抵达还需 ${duration(state.trip.arriveAt-state.now)}`):null));
-    const carrying=h('div');const selections=[];
+    const carrying=h('div');const selections=[];let following=[];
     const packable=state.batches.filter(b=>!['bag','trash'].includes(b.container)&&!b.expired);
-    for(const b of packable){const q=input('0','number',{min:0,max:b.quantity,class:'compact','aria-label':`携带${b.name}数量`});selections.push([b,q]);carrying.append(h('div',{class:'row spread',style:'margin:5px 0'},text(`${b.name} ×${b.quantity}（${b.weight}）`,''),q));}
+    for(const b of packable){const q=input('0','number',{min:0,max:b.quantity,class:'compact','aria-label':`携带${b.name}数量`}),carrier=select([['','自动分配驮运'],...state.animals.filter(a=>!state.babyMode&&a.status==='alive'&&a.carryCapacityG>0).map(a=>[a.id,`${a.name} · ${a.id}`])],'',{'aria-label':`${b.name}驮运者`});selections.push([b,q,carrier]);carrying.append(h('div',{class:'row spread',style:'margin:5px 0'},text(`${b.name} ×${b.quantity}（${b.weight}）`,''),q,state.babyMode?null:carrier));}
     const coins=input('60','number',{min:0,max:state.coins,step:.01,'aria-label':'携带金币'}),estimate=text('');
-    const calc=()=>{const g=bag.usedG+Number(coins.value)*.5+selections.reduce((n,[b,q])=>n+Number(q.value)*b.unitG,0);estimate.textContent=`预计负重 ${WEIGHT(g)} / ${WEIGHT(bag.capacityG)} · 空载约12分钟，满载约42分钟（健康也影响速度）`;};coins.oninput=calc;selections.forEach(([,q])=>q.oninput=calc);calc();
-    const departure=card('装好背包再出发',label(`从钱箱携带金币（现有 ${state.coins}）`,coins),h('details',{},h('summary',{},`选择携带货物 · ${packable.length} 个批次`),carrying),estimate,h('div',{class:'actions'},button('出发赶集',()=>void run('depart',{coins:Number(coins.value),items:selections.filter(([,q])=>Number(q.value)>0).map(([b,q])=>({batchId:b.id,quantity:Number(q.value)}))}),'primary',state.trip.phase!=='home'||!state.market.open),cmd('return',{},'带上收获回家','',state.trip.phase!=='market')));
+    const calc=()=>{const g=bag.usedG+Number(coins.value)*.5+selections.reduce((n,[b,q])=>n+Number(q.value)*b.unitG,0);estimate.textContent=`预计负重 ${WEIGHT(g)} / ${WEIGHT(bag.capacityG+following.reduce((n,id)=>n+(state.animals.find(a=>a.id===id)?.carryCapacityG??0),0))} · 空载约12分钟，满载约42分钟（健康也影响速度）`;};coins.oninput=calc;selections.forEach(([,q])=>q.oninput=calc);calc();
+    const followerSelect=select(state.animals.filter(a=>a.status==='alive'&&!a.sick).map(a=>[a.id,`${a.name} · ${a.species} · 驮力${WEIGHT(a.carryCapacityG||0)}`]),'',{'aria-label':'随行家畜'});followerSelect.multiple=true;followerSelect.size=4;
+    const selectedFollowers=()=>Array.from(followerSelect.selectedOptions).map(o=>o.value);followerSelect.onchange=()=>{following=selectedFollowers();calc();};
+    const departure=card('装好背包再出发',label(`从钱箱携带金币（现有 ${state.coins}）`,coins),state.babyMode?null:h('div',{class:'note'},'可选择健康、吃饱的家畜随行驮运；年龄、健康和饱食会影响驮力与赶路速度。'),state.babyMode?null:label('随行家畜（可多选）',followerSelect),h('details',{},h('summary',{},`选择携带货物 · ${packable.length} 个批次`),carrying),estimate,h('div',{class:'actions'},button('出发赶集',()=>void run('depart',{coins:Number(coins.value),followers:state.babyMode?[]:selectedFollowers(),items:selections.filter(([,q])=>Number(q.value)>0).map(([b,q,c])=>({batchId:b.id,quantity:Number(q.value),...(c.value?{carrierId:c.value}:{})}))}),'primary',state.trip.phase!=='home'||!state.market.open),cmd('return',{},'带上收获回家','',state.trip.phase!=='market')));
     content.append(departure,header('今日货架',`流动商人马车 ${WEIGHT(state.market.merchantLoadedG??0)} / ${WEIGHT(state.market.merchantCapacityG??180000)}`));
     const shop=select([['all','全部作坊与商人'],...Object.entries(state.market.workshops),['merchant','流动商人']],'all',{'aria-label':'选择商铺'}),search=input('','search',{placeholder:'搜索种子、调料、厨具、菜谱…','aria-label':'搜索市集货物'}),stockHolder=h('div');
     const draw=()=>{const stocks=state.market.stock.filter(s=>(shop.value==='all'||s.vendor===shop.value)&&s.name.includes(search.value)&&s.quantity>0);stockHolder.replaceChildren(table(['物品','商铺','单重','价格 / 剩余','购买'],stocks.map(s=>{const q=input('1','number',{min:1,max:s.quantity,class:'compact','aria-label':`购买${s.name}数量`});return h('tr',{},h('td',{},s.name,s.expired?text('已过期，不出售','danger-text'):s.freshness<1?text(`新鲜度${pct(s.freshness)}`):null),h('td',{},state.market.workshops[s.vendor]??'流动商人'),h('td',{},WEIGHT(s.g)),h('td',{},`${coin(s.price)} 金币 / ${s.quantity}`),h('td',{},h('div',{class:'row'},q,button('购买',()=>void run('trade',{mode:'buy',stockId:s.id,quantity:Number(q.value)}),'primary',state.trip.phase!=='market'||!state.market.open||s.expired))));})))};shop.onchange=draw;search.oninput=draw;content.append(h('div',{class:'toolbar'},shop,search),stockHolder);draw();
@@ -103,6 +123,20 @@ function mount(ctx,panel){
     const offerValue=()=>offerRows.filter(([,q])=>Number(q.value)>0).map(([b,q])=>({batchId:b.id,quantity:Number(q.value)}));
     const target=select(state.market.stock.filter(s=>s.quantity>0).map(s=>[s.id,`${s.name} · ${coin(s.price)}金币`]),'',{'aria-label':'以物易物目标'});
     content.append(header('出售与以物易物'),card('挑选随身物件',offers,button('出售选中的物品',()=>void run('trade',{mode:'sell',offer:offerValue()})),h('div',{class:'toolbar'},target,button('交换目标物品一件',()=>void run('trade',{mode:'barter',stockId:target.value,quantity:1,offer:offerValue()}))),text('交换不足的价值用随身金币补齐；超额抵价不找零。若只购买，请使用上方货架。')));
+    if(!state.babyMode&&state.trip.phase==='market'){
+      const butcher=select(state.animals.filter(a=>state.trip.followers.includes(a.id)&&a.status==='alive'&&!a.sick&&!a.pregnancy).map(a=>[a.id,`${a.name} · ${a.id} · ${WEIGHT(a.weightG)}`]),'',{'aria-label':'选择代宰动物'});butcher.multiple=true;butcher.size=5;
+      const selected=()=>Array.from(butcher.selectedOptions).map(o=>o.value);
+      content.append(header('食材坊代宰'),card('委托屠宰',text('代宰按活重每kg收0.12金币，最低4金币。屠宰后失去该动物驮力，超载货物会留在食材坊冷藏。'),butcher,h('div',{class:'actions'},button('用金币代宰',()=>void run('trade',{mode:'butcher',animalIds:selected()}),'primary'),button('用上方选中物品抵代宰费',()=>void run('trade',{mode:'butcher',animalIds:selected(),offer:offerValue()})))));
+    }
+    const jobs=state.market.porterJobs??[];
+    if(jobs.length)content.append(card('正在配送',jobs.map(j=>text(`${state.items.find(i=>i.id===j.itemId)?.name} ×${j.quantity} · ${new Date(j.deliverAt).toLocaleString('zh-CN',{timeZone:state.timezone})}${j.delayed?'（收货箱已满，等待重送）':''}`))));
+    if(state.trip.phase==='market'){
+      const pending=state.market.pendingGoods??[],rows=[];
+      const candidates=[...pending.map(p=>({...p,key:'pendingId',name:p.name,weightG:p.weightG})),...state.batches.filter(b=>b.container==='bag'&&!b.expired&&b.kind!=='animal').map(b=>({...b,key:'batchId'}))];
+      const holder=h('div');for(const p of candidates){const q=input('0','number',{min:0,max:p.quantity,class:'compact','aria-label':`托运${p.name}数量`});rows.push([p,q]);holder.append(h('div',{class:'row spread'},text(`${p.key==='pendingId'?'食材坊':'背包'} · ${p.name} ×${p.quantity} · ${WEIGHT(p.weightG)}`),q));}
+      const goods=()=>rows.filter(([,q])=>Number(q.value)>0).map(([p,q])=>({[p.key]:p.id,quantity:Number(q.value)}));
+      content.append(header('雇佣跑腿小厮'),card('次日早8点送到家',text('每kg 0.4金币，最低2金币，每次最多100kg。请选择数量；抵费物品不能同时托运。途中保冷，送到后放入家中容器，冰箱满出的部分放门廊。'),holder,h('div',{class:'actions'},button('用金币雇佣',()=>void run('trade',{mode:'porter',goods:goods()}),'primary'),button('用上方物品抵跑腿费',()=>void run('trade',{mode:'porter',goods:goods(),offer:offerValue()})))));
+    }
     const noticeSelect=h('select',{multiple:true,size:7,class:'wide','aria-label':'公告所需物品（可多选）'},state.items.filter(i=>i.availableDay<=state.market.day).map(i=>h('option',{value:i.id},`${i.name} · ${WEIGHT(i.g)}`)));
     const ids=()=>Array.from(noticeSelect.selectedOptions).map(o=>o.value);
     content.append(header('布告栏','今天留个愿望，明天商人捎来'),card('请管理员张贴需求',text('按住 Ctrl 多选1–20种已有物品；付2金币，或使用上方选中的随身物品抵费。超载时商人按最轻优先，尽量带齐更多种类。'),noticeSelect,h('div',{class:'actions'},button('付2金币发布',()=>void run('notice',{itemIds:ids()})),button('用选中物件抵费发布',()=>void run('notice',{itemIds:ids(),offer:offerValue()}))),state.notices.map(n=>text(`${n.targetDay} · ${n.itemIds.map(id=>state.items.find(i=>i.id===id)?.name??id).join('、')}`))));
@@ -111,7 +145,7 @@ function mount(ctx,panel){
     content.append(frame('把你的拿手菜，写进世界。','填写食材、调料和步骤，菜谱会在次日进入流动商人的货池。桌宠要亲自赶集买到它，才能学会这道菜。'),h('div',{class:'note'},'此页仅供主人管理。新增不会赠送成品，也不会直接解锁给桌宠。'));
     const id=input(''),name=input(''),method=select(Object.entries(state.methods).map(([k,v])=>[k,v.name]),'steam'),minutes=input('25','number',{min:1,max:240}),water=input('150','number',{min:0,max:3000}),grams=input('220','number',{min:1,max:5000}),life=input('4','number',{min:.25,max:720,step:.25}),satiety=input('26','number',{min:0,max:100}),joy=input('7','number',{min:0,max:30}),price=input('5','number',{min:.01,step:.01}),steps=h('textarea',{placeholder:'每行填写一个步骤，例如：\n淘洗大米\n加入150mL水\n蒸25分钟后出锅'});
     const form=h('div',{class:'formgrid'},label('菜谱ID（英文，例如 carrot_rice）',id),label('菜名',name),label('烹饪方式',method),label('烹饪分钟',minutes),label('加水 mL',water),label('成品重量 g（不得超过投入食材与水）',grams),label('常温保鲜小时',life),label('成品参考价 / 金币',price),label('饱腹值',satiety),label('愉悦值',joy));
-    const rows=h('div'),ingredients=[];function addRow(){const sel=select(state.items.filter(i=>!['tool','kitchenware','material','fertilizer','seed','recipe'].includes(i.kind)).map(i=>[i.id,`${i.name} · ${WEIGHT(i.g)}/单位`]),'rice'),q=input('1','number',{min:1,max:100}),row=h('div',{class:'ingredient-row'},sel,q);const entry={row,sel,q};ingredients.push(entry);row.append(button('移除',()=>{ingredients.splice(ingredients.indexOf(entry),1);row.remove();}));rows.append(row);}
+    const rows=h('div'),ingredients=[];function addRow(){const sel=select(state.items.filter(i=>['grain','vegetable','fruit','legume','spice','oil','tea','egg','meat','dairy','processed','food'].includes(i.kind)).map(i=>[i.id,`${i.name} · ${WEIGHT(i.g)}/单位`]),'rice'),q=input('1','number',{min:1,max:100}),row=h('div',{class:'ingredient-row'},sel,q);const entry={row,sel,q};ingredients.push(entry);row.append(button('移除',()=>{ingredients.splice(ingredients.indexOf(entry),1);row.remove();}));rows.append(row);}
     addRow();form.append(h('div',{class:'full'},h('h3',{},'食材与佐料'),text('数量以目录的销售单位计。盐油等调料也必须作为食材加入，烹饪会真实扣除。'),rows,button('＋ 添加食材或调料',addRow)),label('烹饪步骤（每行一步）',steps,'full'));
     const submit=button('交给商人 · 次日起售',()=>void run('add_recipe',{id:id.value,name:name.value,method:method.value,minutes:Number(minutes.value),waterMl:Number(water.value),yieldGrams:Number(grams.value),shelfHours:Number(life.value),satiety:Number(satiety.value),joy:Number(joy.value),price:Number(price.value),ingredients:ingredients.map(x=>({itemId:x.sel.value,quantity:Number(x.q.value)})),steps:steps.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)}),'primary');
     content.append(card('新菜谱',form,h('div',{class:'actions'},submit)),header('世界菜谱集',`${state.recipes.length} 道 · 可以展开查看配方`));
@@ -119,7 +153,7 @@ function mount(ctx,panel){
   }
   function items(){
     content.append(frame('添一件新物，添一种可能。','世界里还没有的食材、调料、工具或种子，都可以在这里登记。固定作坊的商品次日上架，其余商品次日起由商人随机携带。'));
-    const id=input(''),name=input(''),kind=select(Object.entries(kindName),'vegetable'),grams=input('100','number',{min:1,max:100000}),price=input('1','number',{min:.01,step:.01}),life=input('48','number',{min:.25,max:87600,step:.25}),satiety=input('3','number',{min:0,max:100}),joy=input('2','number',{min:0,max:30}),edible=input('','checkbox'),shop=select([['','流动商人（不属于固定作坊）'],...Object.entries(state.market.workshops)],''),tags=input('', 'text',{placeholder:'例如 seasoning、tea、pest，英文逗号分隔'});
+    const id=input(''),name=input(''),kind=select(Object.entries(kindName).filter(([k])=>k!=='animal'),'vegetable'),grams=input('100','number',{min:1,max:100000}),price=input('1','number',{min:.01,step:.01}),life=input('48','number',{min:.25,max:87600,step:.25}),satiety=input('3','number',{min:0,max:100}),joy=input('2','number',{min:0,max:30}),edible=input('','checkbox'),shop=select([['','流动商人（不属于固定作坊）'],...Object.entries(state.market.workshops)],''),tags=input('', 'text',{placeholder:'例如 seasoning、tea、pest，英文逗号分隔'});
     const form=h('div',{class:'formgrid'},label('物品ID（唯一英文标识）',id),label('物品名称（不能与已有物品重名）',name),label('物品分类',kind),label('所属作坊',shop),label('每销售单位重量 g',grams),label('每单位价格 / 金币',price),label('常温保鲜小时（非食品可留空）',life),label('标签',tags),label('每单位饱腹值',satiety),label('每单位愉悦值',joy),label('可直接食用（生肉、生蛋禁止）',edible,'check-label'));
     const product=select(state.items.filter(i=>['grain','vegetable','fruit','legume'].includes(i.kind)).map(i=>[i.id,i.name]),'tomato'),real=input('60','number'),grow=input('48','number'),yieldUnits=input('20','number'),moisture=input('45','number');
     const seedFields=h('div',{class:'full',style:'display:none'},h('h3',{},'种子配套生长属性'),text('先登记收获物，再登记其种子；收获单位沿用对应物品的单重。'),h('div',{class:'formgrid'},label('收获的物品',product),label('现实生长天数',real),label('缩短后的真实生长小时',grow),label('每田基础收获单位数',yieldUnits),label('适宜土壤水分 %',moisture)));
@@ -128,13 +162,19 @@ function mount(ctx,panel){
     content.append(card('登记新物品',form,h('div',{class:'note'},'作坊会检查分类与标签：油坊只卖油，盐坊只接收佐料，茶坊接收茶叶和茶具，作物坊接收种子/肥料/防虫材料。不能把无关商品塞进固定作坊。'),h('div',{class:'actions'},button('登记物品 · 次日生效',()=>{const p={id:id.value,name:name.value,kind:kind.value,g:Number(grams.value),price:Number(price.value),shelfHours:life.value?Number(life.value):null,satiety:Number(satiety.value),joy:Number(joy.value),rawEdible:edible.checked,workshop:shop.value||null,tags:tags.value.split(/[,，]/).map(t=>t.trim()).filter(Boolean)};if(kind.value==='seed')p.crop={product:product.value,realDays:Number(real.value),growHours:Number(grow.value),yieldUnits:Number(yieldUnits.value),waterNeed:Number(moisture.value)};void run('add_item',p);},'primary'))));
     const search=input('','search',{placeholder:'查询世界已有物品…','aria-label':'查询世界物品'}),holder=h('div');const draw=()=>holder.replaceChildren(table(['名称 / ID','分类','单重','参考价','来源'],state.items.filter(i=>i.name.includes(search.value)||i.id.includes(search.value)).map(i=>h('tr',{},h('td',{},i.name,text(i.id)),h('td',{},kindName[i.kind]??i.kind),h('td',{},WEIGHT(i.g)),h('td',{},`${coin(i.price)} 金币`),h('td',{},i.availableDay>state.market.day?`${i.availableDay}生效`:state.market.workshops[i.workshop]??(i.kind==='food'?'厨房 / 公告订货':'流动商人'))))));search.oninput=draw;content.append(header('物品目录',`${state.items.length} 件物品`),h('div',{class:'toolbar'},search),holder);draw();
   }
+  function diary(){
+    content.append(frame('今晚，把今天好好记下来。','每天按世界配置时区约21:00写一篇日记。日记由实际生活记录生成，离线时会按日期补写；昨晚21点后的事情也会接着记入下一篇。'));
+    if(state.diary.nextAt)content.append(h('div',{class:'note'},`下一篇预计写于 ${new Date(state.diary.nextAt).toLocaleString('zh-CN',{timeZone:state.timezone})} · ${state.timezone}`));
+    if(!state.diary.entries.length)content.append(text('日记本还是空的，今晚九点再来看看。','empty'));
+    for(const e of state.diary.entries)content.append(card(e.title,h('div',{style:'white-space:pre-wrap;line-height:1.9'},e.text),text(`${e.activityCount} 条生活记录 · ${e.timezone}`)));
+  }
   function render(force=false){
     if(!state?.started){content.replaceChildren(text('请先在 World 页面启用「田园烟火」。','empty'));return;}
     clock.textContent=`${state.clock} · ${state.timezone}`;
     if(!force&&loaded&&(['recipes','items'].includes(panel)||content.contains(document.activeElement)))return;
-    content.replaceChildren();({overview,farm,kitchen,storage,market,recipes,items}[panel])();loaded=true;
+    content.replaceChildren();({overview,farm,livestock,kitchen,storage,market,diary,recipes,items}[panel])();loaded=true;
   }
   async function load(){try{state=await ctx.invoke('state',[]);if(!ctx.signal.aborted)render();}catch(e){if(!ctx.signal.aborted)announce(`读取失败：${e.message??e}`,true);}}
   ctx.interval(()=>{if(!busy)void load();},15000);void load();
 }
-export default {panels:Object.fromEntries(['overview','farm','kitchen','storage','market','recipes','items'].map(id=>[id,{mount:ctx=>mount(ctx,id)}]))};
+export default {panels:Object.fromEntries(['overview','farm','livestock','kitchen','storage','market','diary','recipes','items'].map(id=>[id,{mount:ctx=>mount(ctx,id)}]))};

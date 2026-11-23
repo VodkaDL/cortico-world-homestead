@@ -1,11 +1,14 @@
 import { BASE_RECIPES, catalogFor, CROPS } from './catalog.js';
-import { makeBatch, spoilRate } from './inventory.js';
+import { makeBatch, receiveGoods, spoilRate } from './inventory.js';
 import { restock } from './market.js';
-import { clamp, config, HOUR, localTime, random, STEP } from './time.js';
+import { clamp, config, HOUR, localDateTime, localTime, nextDay, random, STEP } from './time.js';
+import { advanceAnimals, createPurchasedAnimal, seedStarterLivestock, SPECIES } from './livestock.js';
+import { initDiary, recordActivity, writeDueDiary } from './diary.js';
 
 export function event(state,type,text,at,meta={}) {
   const e={id:`e${++state.sequence}`,type:`homestead.${type}`,text,at,meta};
   state.events.push(e);if(state.events.length>160)state.events.splice(0,state.events.length-160);
+  if(type!=='diary')recordActivity(state,text,at,type);
   return e;
 }
 export function newState(at=Date.now(),raw={}) {
@@ -14,7 +17,8 @@ export function newState(at=Date.now(),raw={}) {
     coins:120,carriedCoins:0,waterLiters:120,fuelMinutes:0,
     fields:Array.from({length:6},(_,i)=>({id:`field_${i+1}`,name:`第${i+1}块田`,reclaimed:false,cropId:null,progress:0,moisture:35,fertility:60,weeds:75,pests:0,health:100,waterlogging:0,fertilized:false,scarecrowUntil:0,sownAt:null})),
     batches:[],jobs:[],customItems:{},customRecipes:{},customCrops:{},learnedRecipes:Object.values(BASE_RECIPES).filter(r=>r.starter).map(r=>r.id),
-    market:{day:null,stock:[]},notices:[],events:[],trip:{phase:'home'},
+    market:{day:null,stock:[],pendingGoods:[],porterJobs:[]},notices:[],events:[],trip:{phase:'home',followers:[],purchasedAnimals:[]},
+    animals:[],livestock:{setupGranted:false,nextFeedingAt:at+HOUR,spoiledFeedG:0,pendingProduce:[],shipmentSequence:0},
     weather:{id:'clear',name:'晴朗',slot:Math.floor(at/(3*HOUR)),since:at},trashTotalG:0,
   };
   const give=(id,q,to)=>makeBatch(state,id,q,to,at);
@@ -23,7 +27,8 @@ export function newState(at=Date.now(),raw={}) {
   give('rice',10,'granary');give('noodles',5,'granary');give('egg',6,'fridge');
   give('oil',40,'pantry');give('salt',30,'pantry');give('soy_sauce',10,'pantry');
   give('fertilizer',10,'shed');give('fuel',10,'shed');
-  restock(state,at,cfg);event(state,'welcome','六块荒田等待开垦。工具棚已有基础农具厨具，食品柜有少量口粮；先看库存与已掌握菜谱。',at);
+  state.market.pendingGoods=[];state.market.porterJobs=[];
+  initDiary(state,cfg);restock(state,at,cfg);event(state,'welcome','六块荒田等待开垦。工具棚已有基础农具厨具，食品柜有少量口粮；先看库存与已掌握菜谱。',at);
   return state;
 }
 const WEATHER=[
@@ -48,9 +53,12 @@ function weatherAt(state,at,cfg) {
 function continuous(state,from,to,cfg) {
   const h=(to-from)/HOUR;if(h<=0)return;const {items,crops}=catalogFor(state),p=state.pet;
   for(const b of state.batches) {
-    const i=items[b.itemId];if(i.shelfHours&&b.container!=='trash')b.ageHours=Math.min(i.shelfHours,b.ageHours+h*spoilRate(i,b.container));
+    const i=items[b.itemId],life=b.shelfHoursOverride??i.shelfHours;if(life&&b.container!=='trash')b.ageHours=Math.min(life,b.ageHours+h*spoilRate(i,b.container));
   }
   for(const s of state.market.stock) {const i=items[s.itemId];if(i.shelfHours)s.ageHours=Math.min(i.shelfHours,s.ageHours+h*spoilRate(i,s.container));}
+  for(const p of state.market.pendingGoods??[]){const i=items[p.itemId];if(i?.shelfHours)p.ageHours=Math.min(p.shelfHoursOverride??i.shelfHours,(p.ageHours??0)+h*spoilRate(i,'fridge'));}
+  for(const j of state.market.porterJobs??[]){const i=items[j.itemId];if(i?.shelfHours)j.ageHours=Math.min(j.shelfHoursOverride??i.shelfHours,(j.ageHours??0)+h*spoilRate(i,'fridge'));}
+  for(const p of state.livestock.pendingProduce??[]){const i=items[p.itemId],life=p.shelfHoursOverride??i.shelfHours;if(life)p.ageHours=Math.min(life,(p.ageHours??0)+h*spoilRate(i,'doorstep'));}
   const resting=p.restUntil>from,walking=['outbound','returning'].includes(state.trip.phase);
   p.satiety=clamp(p.satiety-cfg.hungerPerHour*h*(resting?.65:walking?1.5:1));
   p.hydration=clamp(p.hydration-h*(resting?1.5:state.weather.id==='drought'?5:3));
@@ -74,30 +82,47 @@ function continuous(state,from,to,cfg) {
     const before=f.progress;
     if(f.health>0) {
       const moisture=.22+.78*Math.min(1,avgM/c.waterNeed),weedFactor=1-f.weeds*.006,pestFactor=1-f.pests*.005;
-      const weatherFactor=state.weather.id==='sunny'?1.18:state.weather.id==='bees'&&['fruit','vegetable'].includes(items[c.id].kind)?1.2:state.weather.id==='cold'?.65:1;
+      const weatherFactor=state.weather.id==='sunny'?1.18:state.weather.id==='bees'&&['fruit','vegetable'].includes(items[c.product].kind)?1.2:state.weather.id==='cold'?.65:1;
       f.progress=clamp(f.progress+100*h/c.growHours*cfg.growthMultiplier*moisture*weedFactor*pestFactor*(.5+f.health/200)*weatherFactor);
     }
     if(before<100&&f.progress>=100) {event(state,'harvest',`${f.name}的${c.name}成熟，可以收获了。`,to,{fieldId:f.id});p.joy=clamp(p.joy+3);}
     if(f.progress>=100){f.health=clamp(f.health-h*.12);if(f.scarecrowUntil<to&&random(state.seed,`bird:${f.id}:${Math.floor(to/HOUR)}`)<.05)f.health=clamp(f.health-h*.4);} // 稻草人仅防鸟，不防虫。
   }
+  const husbandry=advanceAnimals(state,from,to,cfg);
+  for(const p of husbandry.produced){const left=receiveGoods(state,p,to,cfg);if(left)state.livestock.pendingProduce.push({...p,quantity:left,ageHours:0});}
+  for(const e of husbandry.diseases)event(state,e.recovered?'animal_recovery':'animal_illness',e.recovered?`${SPECIES[e.species].name}治疗后恢复。`:`${SPECIES[e.species].name}出现${e.disease}，请使用兽药并及时治疗。`,to,{animalId:e.id,disease:e.disease});
+  for(const e of husbandry.births){event(state,'animal_birth',e.count?`${SPECIES[e.mother.species].name}顺利生产，新增${e.count}只幼崽。`:`${SPECIES[e.mother.species].name}完成生产，但住房已满，幼崽由畜牧坊接收。`,to,{animalId:e.mother.id,count:e.count});state.pet.joy=clamp(state.pet.joy+(e.count?7:0));}
+  for(const a of husbandry.deaths){event(state,'animal_death',`${SPECIES[a.species].name}${a.deathCause==='disease'?'病死，不能食用，请无害化处理':'已自然寿终，可由主人选择处理并冷藏'}。`,to,{animalId:a.id,cause:a.deathCause});state.pet.joy=clamp(state.pet.joy-6);}
 }
 function boundary(state,at,cfg) {
   for(const j of [...state.jobs])if(j.finishAt<=at) {
     state.jobs=state.jobs.filter(x=>x.id!==j.id);
     const i=catalogFor(state).items[j.outputId];
-    makeBatch(state,j.outputId,j.quantity,j.container,j.finishAt,{ageHours:j.initialAgeHours??0});
+    makeBatch(state,j.outputId,j.quantity,j.container,j.finishAt,{ageHours:j.initialAgeHours??0,satietyMultiplier:j.satietyMultiplier??1});
     event(state,'cooked',`${i.name}已完成，放入${j.container}；离线完成也从实际出锅时间开始保鲜。`,j.finishAt,{jobId:j.id});
   }
   if(state.trip.arriveAt&&state.trip.arriveAt<=at) {
-    if(state.trip.phase==='outbound') {state.trip={phase:'market'};state.pet.social=clamp(state.pet.social+8);event(state,'travel','已抵达集市。请先看营业状态和随身负重，再交易。',at);}
-    else if(state.trip.phase==='returning') {state.trip={phase:'home'};state.coins=moneySafe(state.coins+state.carriedCoins);state.carriedCoins=0;event(state,'travel','已回家，随身金币已放回钱箱；背包物品请手动放入粮仓、冰箱或工具棚。',at);}
+    if(state.trip.phase==='outbound') {state.trip={...state.trip,phase:'market',arrivedAt:at,arriveAt:null};state.pet.social=clamp(state.pet.social+8);event(state,'travel','已抵达集市。请先看营业状态和随身负重，再交易。',at);}
+    else if(state.trip.phase==='returning') {
+      for(const b of state.batches)if(b.container==='bag')delete b.carrierId;
+      const purchased=state.trip.purchasedAnimals??[];state.trip={phase:'home',followers:[],purchasedAnimals:[],transportGrams:0};state.coins=moneySafe(state.coins+state.carriedCoins);state.carriedCoins=0;
+      for(const a of state.animals.filter(a=>a.onMarket)){a.onMarket=false;a.homeAt=at;}
+      for(const a of purchased)try{createPurchasedAnimal(state,a.species,a.sex,at);}catch{state.market.pendingAnimals??=[];state.market.pendingAnimals.push(a);}
+      event(state,'travel','已回家，随身金币已放回钱箱；背包物品请手动整理。',at);
+    }
   }
+  for(const j of state.market.porterJobs??[])if(!Number.isFinite(j.deliverAt))j.deliverAt=nextMarketDelivery(at,cfg);
+  for(const j of state.market.porterJobs??[])if(j.deliverAt<=at){const left=receiveGoods(state,{...j,porterDelivery:true},at,cfg),delivered=j.quantity-left;j.quantity=left;if(delivered)event(state,'delivery',`跑腿小厮已送到${catalogFor(state).items[j.itemId].name} ×${delivered}；已放入家中容器，超出冷藏空间的部分在门廊收货箱。`,at);if(left){j.delayed=true;j.deliverAt=at+HOUR;}}
+  state.market.porterJobs=(state.market.porterJobs??[]).filter(j=>j.quantity>0);
   if(state.pet.restUntil&&state.pet.restUntil<=at){state.pet.restUntil=0;event(state,'life','休息结束，精神恢复了一些。',at);}
   restock(state,at,cfg);weatherAt(state,at,cfg);
+  const diary=writeDueDiary(state,at,cfg);if(diary)event(state,'diary',`今晚的日记写好了：${diary.title}。可在「小院日记」查看。`,diary.at,{diaryId:diary.id});
 }
 const moneySafe=n=>Math.round(n*100)/100;
+function nextMarketDelivery(at,cfg){return localDateTime(nextDay(localTime(at,cfg.timezone).day),8,0,cfg.timezone);}
 export function advance(state,now,raw={}) {
   const cfg=config(raw);if(typeof now!=='number'||!Number.isFinite(now))throw new Error('无效时钟');
+  initDiary(state,cfg);
   if(now<state.lastAt)return state; // 时钟回拨时不回滚年龄，也不重复刷新市场。
   let t=state.lastAt;
   // 固定15分钟边界 + 精确出锅/抵达/起床边界，不丢弃任何离线时间。
@@ -105,7 +130,7 @@ export function advance(state,now,raw={}) {
   if(now-t>10*366*24*HOUR)throw new Error('系统时钟前跳超过十年，请先检查电脑时间；存档未覆盖');
   while(t<now) {
     let end=Math.min(now,(Math.floor(t/STEP)+1)*STEP);
-    for(const at of [...state.jobs.map(j=>j.finishAt),state.trip.arriveAt,state.pet.restUntil,state.pet.coldUntil])if(at>t&&at<end)end=at;
+    for(const at of [...state.jobs.map(j=>j.finishAt),state.trip.arriveAt,state.pet.restUntil,state.pet.coldUntil,state.diary.nextAt,...(state.market.porterJobs??[]).map(j=>j.deliverAt)])if(Number.isFinite(at)&&at>t&&at<end)end=at;
     continuous(state,t,end,cfg);t=end;state.lastAt=t;boundary(state,t,cfg);
   }
   return state;
