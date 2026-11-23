@@ -1,0 +1,30 @@
+{
+  "name": "cortico-world-homestead",
+  "version": "1.0.0",
+  "type": "module",
+  "keywords": ["cortico-world", "coopanion", "farming", "cooking", "market", "homestead"],
+  "description": "田园烟火：真实时间种植、保鲜、厨房、身心状态与负重赶集的 Coopanion World 扩展",
+  "license": "MIT",
+  "author": "VodkaDL",
+  "repository": {"type":"git","url":"git+https://github.com/VodkaDL/cortico-world-homestead.git"},
+  "homepage": "https://github.com/VodkaDL/cortico-world-homestead#readme",
+  "engines": { "node": ">=18.17" },
+  "main": "./src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "files": ["src", "dist", "assets", "describe.json", "README.md", "docs", "tools", "test", "preview", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node tools/check.mjs",
+    "describe": "node tools/describe.mjs",
+    "catalog": "node tools/catalog.mjs",
+    "install:local": "node tools/install.mjs",
+    "preview": "node tools/preview.mjs",
+    "drymount": "node tools/drymount.mjs",
+    "prepack": "node tools/describe.mjs && node tools/check.mjs"
+  },
+  "cortico": {
+    "kind": "world", "api": 6, "displayName": "田园烟火",
+    "icon": "assets/icon.svg", "tags": ["game"],
+    "webUiClient": "dist/webui.js", "describe": "describe.json"
+  }
+}

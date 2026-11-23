@@ -1,0 +1,9 @@
+.reference-eat/
+node_modules/
+coverage/
+*.tgz
+*.tmp
+.runtime/
+test-results/
+playwright-report/
+.local/
