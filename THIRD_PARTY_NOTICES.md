@@ -1,5 +1,11 @@
 # 参考来源与许可
 
+## 扩展图标
+
+`assets/icon.png` 使用主人于2026-11-23在本项目对话中提供的第一张图片，原图直接收录，未重新绘制或裁剪。它替代本扩展原先的芽苗图标；图片来源说明不代表对图片权属或授权范围作额外声明。
+
+## 架构参考
+
 架构参考：[AqualCross/cortico-world-eat](https://github.com/AqualCross/cortico-world-eat)，参考提交 `6f03d205c4c6e2b560969de3270cfbf6e852c6e2`（2026-11-23取用）。
 
 参考 WorldDefinition API 6、工具声明/self-description、World start/stop、原子存档、串行队列及浏览器 ctx.invoke/interval 的实现思路；领域逻辑、页面布局、目录和规则为本扩展独立编写。本包不包含参考扩展的图标和其他资源，不是 Coopanion 或 cortico 官方扩展。

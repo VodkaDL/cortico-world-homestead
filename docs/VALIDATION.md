@@ -1,3 +1,18 @@
+# 验证记录
+
+## 1.1.1 图标与功能介绍
+
+验证日期：2026-11-23，Asia/Shanghai。
+
+- 扩展清单改用 `assets/icon.png`，删除旧芽苗 SVG；图标与主人提供的第一张1254×1254 PNG逐字节一致，未裁剪或重绘。
+- README 展示新图标并链接到 `docs/FEATURES.md`，功能介绍包含13组玩法、九个页面和可直接分享的介绍文案。
+- `node tools/check.mjs`：101项测试通过，343项目录、100道菜谱、9个面板检查通过。
+- 本机 Coopanion 0.2.23 / World API 6 `dryMountWorld`：5类检查通过，0警告、0失败。
+- `npm pack --dry-run --ignore-scripts --json`：打包文件包含新图标和功能介绍，不包含旧SVG图标；打包前已单独运行完整检查。
+- 已安装到原本机扩展目录，Core空闲时正常重启，6项关机步骤成功；接口确认 `version:1.1.1`、`installedVersion:1.1.1`、`loaded:true`、`enabled:true`、`state:loaded`。
+- 实际访问宿主图标接口返回200、`Content-Type: image/png`，响应内容、安装文件和用户原图完全一致；SHA-256为 `8e0155372eab193252cc52ed788e7e399a2989f89330f819a6a7bebc27a5b887`。
+- 本次仅调整图标、版本号与说明文档，未改动玩法实现或存档结构；未重复执行下方1.1.0的九页面浏览器交互验收。
+
 # 1.1.0 验证记录
 
 验证日期：2026-11-23，Asia/Shanghai。

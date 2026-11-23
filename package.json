@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-homestead",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "keywords": [
     "cortico-world",
@@ -52,7 +52,7 @@
     "kind": "world",
     "api": 6,
     "displayName": "田园烟火",
-    "icon": "assets/icon.svg",
+    "icon": "assets/icon.png",
     "tags": [
       "game"
     ],
