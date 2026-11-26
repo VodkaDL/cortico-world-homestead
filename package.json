@@ -3,14 +3,12 @@
   "version": "1.0.2",
   "type": "module",
   "keywords": [
+    "cortico",
     "cortico-world",
-    "coopanion",
-    "farming",
-    "cooking",
-    "market",
-    "homestead"
+    "game",
+    "companion"
   ],
-  "description": "田园烟火：真实时间种植、养殖繁育、厨房保鲜、负重赶集与晚间日记的 Coopanion World 扩展",
+  "description": "田园烟火，我要给她完整的鱼生！\n\n🌱 作物种植：播种、浇水、收获，体验农耕乐趣。\n🐄 动物养殖：饲养动物，获取各类农产品。\n🍳 烹饪料理：使用食材制作丰富美食。\n🏡 家园经营：管理物资，打造温馨家园。\n🛒 自由交易：买卖商品，积累财富。\n🎒 物品储存：管理背包与仓库资源。\n💚 角色护理：关注角色状态与日常需求。",
   "license": "MIT",
   "author": "VodkaDL",
   "repository": {
@@ -54,8 +52,19 @@
     "api": 6,
     "displayName": "田园烟火",
     "icon": "assets/icon.png",
+    "screenshots": [
+      "assets/screenshots/1.png",
+      "assets/screenshots/2.png",
+      "assets/screenshots/3.png",
+      "assets/screenshots/4.png",
+      "assets/screenshots/5.png",
+      "assets/screenshots/6.png",
+      "assets/screenshots/7.png",
+      "assets/screenshots/8.png"
+    ],
     "tags": [
-      "game"
+      "game",
+      "companion"
     ],
     "webUiClient": "dist/webui.js",
     "describe": "describe.json"
