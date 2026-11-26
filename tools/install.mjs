@@ -13,7 +13,7 @@ if(await exists(target)){
   const prev=JSON.parse(await readFile(join(target,'package.json'),'utf8'));if(prev.name!==name)throw new Error('目标目录不是本扩展，未覆盖');
 }
 await mkdir(dirname(target),{recursive:true});const stage=`${target}.stage-${stamp}`;await mkdir(stage);
-for(const file of ['package.json','src','dist','assets','describe.json','README.md','docs','tools','test','preview','LICENSE','THIRD_PARTY_NOTICES.md'])await cp(join(source,file),join(stage,file),{recursive:true});
+for(const file of ['package.json','src','dist','assets','describe.json','README.md','CHANGELOG.md','docs','tools','test','preview','LICENSE','THIRD_PARTY_NOTICES.md'])await cp(join(source,file),join(stage,file),{recursive:true});
 if(await exists(target))await rename(target,`${target}.backup-${stamp}`);
 await rename(stage,target);await mkdir(dirname(link),{recursive:true});if(!await exists(link))await symlink(target,link,process.platform==='win32'?'junction':'dir');
 const manifest=join(extensions,'package.json');let data={name:'cortico-extensions',private:true,dependencies:{}};

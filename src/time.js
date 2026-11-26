@@ -1,7 +1,7 @@
 export const HOUR = 3_600_000;
 export const DAY = 24 * HOUR;
 export const STEP = 15 * 60_000;
-export const DEFAULTS = Object.freeze({enabled:false,timezone:'Asia/Shanghai',tickIntervalMs:60_000,growthMultiplier:1,weatherEnabled:true,hungerPerHour:3,carryLimitKg:12,merchantCapacityKg:180,babyMode:true,babyModeConfigured:false,animalAgeMultiplier:1});
+export const DEFAULTS = Object.freeze({enabled:false,timezone:'Asia/Shanghai',tickIntervalMs:60_000,growthMultiplier:1,weatherEnabled:true,hungerPerHour:3,carryLimitKg:12,merchantCapacityKg:180,babyMode:true,babyModeConfigured:false,animalAgeMultiplier:1,autonomyEnabled:true});
 const formats = new Map();
 export function config(raw={}) {
   const c={...DEFAULTS,...raw};
@@ -10,6 +10,7 @@ export function config(raw={}) {
     if(typeof c[key]!=='number'||!Number.isFinite(c[key])||c[key]<lo||c[key]>hi) throw new Error(`配置 ${key} 必须在 ${lo}–${hi} 之间`);
   }
   if(typeof c.weatherEnabled!=='boolean') throw new Error('weatherEnabled 必须为布尔值');
+  if(typeof c.autonomyEnabled!=='boolean') throw new Error('autonomyEnabled 必须为布尔值');
   if(typeof c.babyMode!=='boolean'||typeof c.babyModeConfigured!=='boolean') throw new Error('宝宝模式选项必须为布尔值');
   requireNumber(c.animalAgeMultiplier,'动物年龄倍率',.25,4);
   return c;

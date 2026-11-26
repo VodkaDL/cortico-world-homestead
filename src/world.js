@@ -1,11 +1,13 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyAction } from './actions.js';
+import { maybeCare } from './autonomy.js';
 import { seedStarterLivestock } from './livestock.js';
 import { config, DEFAULTS } from './time.js';
 import { advance, event, newState } from './simulation.js';
 import { loadState, saveState } from './persistence.js';
 import { snapshot } from './view.js';
+import { recordActivity } from './diary.js';
 
 const obj=(properties={},required=[])=>({type:'object',properties,required,additionalProperties:false});
 const str=description=>({type:'string',description});const number=(description,min=1,max=1000)=>({type:'number',description,minimum:min,maximum:max});
@@ -33,7 +35,7 @@ const allowedCare=new Set(['drink','fill_water','wash','rest','cancel_rest','pla
 const allowedStore=new Set(['move','unpack','discard','empty_trash']);
 const stage=p=>p.satiety<=0?4:p.satiety<=15?3:p.satiety<=35?2:p.satiety<=60?1:0;
 export class HomesteadWorld {
-  id='homestead';#state=null;#host=null;#timer=null;#queue=Promise.resolve();#started=false;#closing=false;
+  id='homestead';#state=null;#host=null;#timer=null;#queue=Promise.resolve();#started=false;#closing=false;#chatStores=new WeakSet();#lastChatCursor=0;
   constructor(opts={}) {this.cfg=opts.cfg??{...DEFAULTS};this.persist=opts.persist??(()=>{});this.dataDir=opts.dataDir??process.cwd();this.packageDir=opts.packageDir??process.cwd();this.now=opts.now??(()=>Date.now());this.noTimer=opts.noTimer??false;}
   stateFile(){return join(this.dataDir,'homestead','state.json');}
   envPromptVars(){return {};}
@@ -42,6 +44,7 @@ export class HomesteadWorld {
   async #advanceSave() {
     const next=structuredClone(this.#state),cfg=config(this.cfg),now=this.now(),before=stage(next.pet);
     advance(next,now,cfg);if(!cfg.babyMode&&!next.livestock.setupGranted){seedStarterLivestock(next,now);event(next,'life','养殖模式已启用，首批动物、饲料、兽药和屠宰套件已备齐。',now);}if(stage(next.pet)>before)event(next,'hunger','肚子饿了，请查看库存与已掌握菜谱，优先吃新鲜食物。',now);
+    if(cfg.autonomyEnabled)maybeCare(next,now,cfg);
     await saveState(this.stateFile(),next);this.#state=next;
     return cfg;
   }
@@ -104,14 +107,21 @@ export class HomesteadWorld {
     panels:PANELS.map(([id,title])=>({id,title,getMethods:[]})),invoke:(p,m,a)=>this.invoke(p,m,a),
     config:[{id:'homestead',owner:'world:homestead',title:'田园烟火',schema:{type:'object',properties:Object.fromEntries([
       ['babyMode',{type:'boolean',title:'宝宝模式（默认开启；关闭后启用动物养殖与屠宰）'}],['animalAgeMultiplier',{type:'number',minimum:.25,maximum:4,title:'动物生理年龄倍率'}],
-      ['timezone',{type:'string',title:'营业时区（IANA）'}],['growthMultiplier',{type:'number',minimum:.1,maximum:10,title:'作物生长倍率'}],['weatherEnabled',{type:'boolean',title:'随机天气'}],['hungerPerHour',{type:'number',minimum:0,maximum:20,title:'每小时饱腹消耗'}],['carryLimitKg',{type:'number',minimum:2,maximum:50,title:'健康时负重kg'}],['merchantCapacityKg',{type:'number',minimum:10,maximum:1000,title:'商人马车载重kg'}],['tickIntervalMs',{type:'number',minimum:5000,maximum:3600000,title:'结算间隔ms'}],
+      ['timezone',{type:'string',title:'营业时区（IANA）'}],['growthMultiplier',{type:'number',minimum:.1,maximum:10,title:'作物生长倍率'}],['weatherEnabled',{type:'boolean',title:'随机天气'}],['autonomyEnabled',{type:'boolean',title:'桌宠主动照料自己'}],['hungerPerHour',{type:'number',minimum:0,maximum:20,title:'每小时饱腹消耗'}],['carryLimitKg',{type:'number',minimum:2,maximum:50,title:'健康时负重kg'}],['merchantCapacityKg',{type:'number',minimum:10,maximum:1000,title:'商人马车载重kg'}],['tickIntervalMs',{type:'number',minimum:5000,maximum:3600000,title:'结算间隔ms'}],
     ].map(([k,v])=>[`worlds.homestead.${k}`,{...v,'x-hot':true}]))}}],
     promptDocs:[{key:'worlds.homestead.env',title:'田园烟火',description:'种田、厨房、保鲜与赶集规则',path:fileURLToPath(new URL('./ENV_PROMPT.md',import.meta.url)),role:'envPrompt'}],
   };}
   async start(host) {
     return this.serial(async()=>{if(this.#started)return;this.#closing=false;this.#host=host;
       this.#state=await loadState(this.stateFile())??newState(this.now(),this.cfg);this.#started=true;
-      try{await this.#advanceSave();await this.#deliver();this.#schedule();}catch(err){this.#started=false;this.#host=null;throw err;}
+      try{this.#subscribeChat();await this.#advanceSave();await this.#deliver();this.#schedule();}catch(err){this.#started=false;this.#host=null;throw err;}
+    });
+  }
+  #subscribeChat(){const store=this.#host?.store;if(!store||typeof store.onAppend!=='function'||this.#chatStores.has(store))return;
+    this.#chatStores.add(store);this.#lastChatCursor=store.latestCursor?.()??0;
+    store.onAppend(e=>{if(!this.#started||e.cursor<=this.#lastChatCursor)return;this.#lastChatCursor=e.cursor;
+      if(e.type!=='desktop-pet.message'||e.origin!=='external'||e.source!=='desktop-pet')return;
+      void this.serial(async()=>{if(!this.#started||!this.#state)return;await this.#advanceSave();const next=structuredClone(this.#state),at=Math.max(this.now(),next.lastAt);next.pet.social=Math.min(100,next.pet.social+2);recordActivity(next,'主人陪我聊了一会儿，我觉得亲近了些。',at,'social');await saveState(this.stateFile(),next);this.#state=next;}).catch(err=>this.#host?.log?.warn?.('聊天社交值结算失败',{error:err.message}));
     });
   }
   #schedule(){if(!this.#started||this.noTimer||this.#closing)return;this.#timer=setTimeout(()=>{this.#timer=null;void this.serial(async()=>{if(!this.#started||this.#closing)return;await this.#advanceSave();await this.#deliver();}).catch(e=>this.#host?.log?.warn?.('田园结算失败',{error:e.message})).finally(()=>this.#schedule());},config(this.cfg).tickIntervalMs);this.#timer.unref?.();}

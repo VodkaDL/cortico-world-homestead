@@ -9,7 +9,7 @@ import { validateState } from '../src/persistence.js';
 import ui from '../dist/webui.js';
 const root=new URL('../',import.meta.url),pkg=JSON.parse(await readFile(new URL('package.json',root),'utf8'));
 assert.equal(pkg.cortico.api,6);assert.equal(def.id,'homestead');assert.equal(def.defaults().enabled,false);
-for(const path of [pkg.main,pkg.cortico.webUiClient,pkg.cortico.icon,pkg.cortico.describe,'LICENSE','README.md','THIRD_PARTY_NOTICES.md'])await access(new URL(path,root));
+for(const path of [pkg.main,pkg.cortico.webUiClient,pkg.cortico.icon,pkg.cortico.describe,'LICENSE','README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md'])await access(new URL(path,root));
 const s=newState(Date.now());validateState(s);const {items}=catalogFor(s),names=new Set();
 for(const i of Object.values(items)){assert(!names.has(i.name),`重复物品名 ${i.name}`);names.add(i.name);assert(i.g>0&&i.price>0,`重量价格 ${i.id}`);}
 for(const r of Object.values(BASE_RECIPES)){
